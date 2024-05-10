@@ -9,6 +9,9 @@ import joblib
 import numpy as np
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
 
 
 data = pd.read_csv("cwurData.csv")
@@ -100,17 +103,22 @@ def show_classification():
     columns_to_drop = ['world_rank', 'institution', 'country', 'year', 'national_rank', 'AkreditasiRank']
     features = df.drop(columns=columns_to_drop)
 
-    # Encoding kolom target 'AkreditasiRank'
-    label_encoder = LabelEncoder()
-    df['AkreditasiRank_encoded'] = label_encoder.fit_transform(df['AkreditasiRank'])
+    # Definisikan kolom-kolom yang akan diolah oleh masing-masing transformer
+    numeric_features = features.select_dtypes(include=['int64', 'float64']).columns
+    numeric_transformer = Pipeline(steps=[
+        ('imputer', SimpleImputer(strategy='median')),
+        ('scaler', StandardScaler())])
 
-    # Normalisasi data
-    scaler = MinMaxScaler()
-    scaled_features = scaler.fit_transform(features)
+    # Gabungkan transformer untuk kolom numerik
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('num', numeric_transformer, numeric_features)])
 
-    # Melatih model KNN dengan parameter yang ditentukan
-    knn_classifier = KNeighborsClassifier(n_neighbors=2)
-    knn_classifier.fit(scaled_features, df['AkreditasiRank_encoded'])
+    # Normalisasi data dan pelatihan model KNN dengan pipeline
+    pipeline = Pipeline(steps=[('preprocessor', preprocessor),
+                            ('classifier', KNeighborsClassifier(n_neighbors=2))])
+
+    pipeline.fit(features, df['AkreditasiRank'])
 
     # Menampilkan judul dan deskripsi aplikasi
     st.title("Klasifikasi Akreditasi Perguruan Tinggi")
@@ -122,17 +130,14 @@ def show_classification():
     for feature in features.columns:
         input_features[feature] = st.number_input(feature)
 
-    # Prediksi akreditasi
     input_data = pd.DataFrame([input_features])
-    scaled_input = scaler.transform(input_data)
-    prediction = knn_classifier.predict(scaled_input)
 
-    # Mengembalikan label asli dari hasil prediksi
-    decoded_prediction = label_encoder.inverse_transform(prediction)
+    # Prediksi akreditasi
+    prediction = pipeline.predict(input_data)
 
     # Menampilkan hasil prediksi
     st.write("Hasil Prediksi Akreditasi:")
-    st.write(decoded_prediction[0])
+    st.write(prediction[0])
 
 if __name__ == '__main__':
     main()
